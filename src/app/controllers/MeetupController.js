@@ -1,15 +1,39 @@
 import * as Yup from 'yup';
-import { isBefore } from 'date-fns';
+import { Op } from 'sequelize';
+import { isBefore, startOfDay, endOfDay } from 'date-fns';
 import Meetup from '../models/Meetup';
 import User from '../models/User';
+import File from '../models/File';
 
 class MeetupController {
   async index(req, res) {
-    const user_id = req.userId;
+    const where = {};
+    const page = req.query.page || 1;
+
+    if (req.query.date) {
+      const serchDate = req.query.date;
+
+      where.date = {
+        [Op.between]: [startOfDay(serchDate), endOfDay(serchDate)],
+      };
+    }
 
     const meetups = await Meetup.findAll({
-      where: { user_id },
-      include: [User],
+      where,
+      include: [
+        {
+          model: User,
+          as: 'User',
+          attributes: ['id', 'name', 'email'],
+        },
+        {
+          model: File,
+          as: 'avatar',
+          attributes: ['id', 'path', 'url'],
+        },
+      ],
+      limit: 10,
+      offset: (page - 1) * 10,
     });
 
     return res.json(meetups);
@@ -73,7 +97,17 @@ class MeetupController {
 
     await meetup.update(req.body);
 
-    return res.json(meetup);
+    const meetupAfterUpdate = await Meetup.findByPk(req.params.id, {
+      include: [
+        {
+          model: File,
+          as: 'avatar',
+          attributes: ['id', 'path', 'url'],
+        },
+      ],
+    });
+
+    return res.json(meetupAfterUpdate);
   }
 
   async delete(req, res) {
